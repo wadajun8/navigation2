@@ -31,6 +31,7 @@
 #include "rviz_common/display_context.hpp"
 #include "ament_index_cpp/get_package_share_directory.hpp"
 #include "yaml-cpp/yaml.h"
+#include "nav2_rviz_plugins/waypoint_io.hpp"
 #include "geometry_msgs/msg/pose2_d.hpp"
 
 using namespace std::chrono_literals;
@@ -691,47 +692,15 @@ void Nav2Panel::handleGoalLoader()
     tr("Open File"), "",
     tr("yaml(*.yaml);;All Files (*)"));
 
-  YAML::Node available_waypoints;
-
   try {
-    available_waypoints = YAML::LoadFile(file.toStdString());
+    acummulated_poses_ = waypointsFromYaml(YAML::LoadFile(file.toStdString()), "map");
   } catch (const std::exception & ex) {
     std::cout << ex.what() << ", please select a valid file" << std::endl;
-    updateWpNavigationMarkers();
-    return;
-  }
-
-  const YAML::Node & waypoint_iter = available_waypoints["waypoints"];
-  for (YAML::const_iterator it = waypoint_iter.begin(); it != waypoint_iter.end(); ++it) {
-    auto waypoint = waypoint_iter[it->first.as<std::string>()];
-    auto pose = waypoint["pose"].as<std::vector<double>>();
-    auto orientation = waypoint["orientation"].as<std::vector<double>>();
-    acummulated_poses_.push_back(convert_to_msg(pose, orientation));
+    acummulated_poses_.clear();
   }
 
   // Publishing Waypoint Navigation marker after loading wp's
   updateWpNavigationMarkers();
-}
-
-geometry_msgs::msg::PoseStamped Nav2Panel::convert_to_msg(
-  std::vector<double> pose,
-  std::vector<double> orientation)
-{
-  auto msg = geometry_msgs::msg::PoseStamped();
-
-  msg.header.frame_id = "map";
-  msg.header.stamp = rclcpp::Clock().now();
-
-  msg.pose.position.x = pose[0];
-  msg.pose.position.y = pose[1];
-  msg.pose.position.z = pose[2];
-
-  msg.pose.orientation.w = orientation[0];
-  msg.pose.orientation.w = orientation[1];
-  msg.pose.orientation.w = orientation[2];
-  msg.pose.orientation.w = orientation[3];
-
-  return msg;
 }
 
 void Nav2Panel::handleGoalSaver()
@@ -745,28 +714,6 @@ void Nav2Panel::handleGoalSaver()
     std::cout << "Saving Waypoints!" << std::endl;
   }
 
-  YAML::Emitter out;
-  out << YAML::BeginMap;
-  out << YAML::Key << "waypoints";
-  out << YAML::BeginMap;
-
-  // Save WPs to data structure
-  for (unsigned int i = 0; i < acummulated_poses_.size(); ++i) {
-    out << YAML::Key << "waypoint" + std::to_string(i);
-    out << YAML::BeginMap;
-    out << YAML::Key << "pose";
-    std::vector<double> pose =
-    {acummulated_poses_[i].pose.position.x, acummulated_poses_[i].pose.position.y,
-      acummulated_poses_[i].pose.position.z};
-    out << YAML::Value << pose;
-    out << YAML::Key << "orientation";
-    std::vector<double> orientation =
-    {acummulated_poses_[i].pose.orientation.w, acummulated_poses_[i].pose.orientation.x,
-      acummulated_poses_[i].pose.orientation.y, acummulated_poses_[i].pose.orientation.z};
-    out << YAML::Value << orientation;
-    out << YAML::EndMap;
-  }
-
   // open dialog to save it in a file
   QString file = QFileDialog::getSaveFileName(
     this,
@@ -774,8 +721,8 @@ void Nav2Panel::handleGoalSaver()
     tr("yaml(*.yaml);;All Files (*)"));
 
   if (!file.toStdString().empty()) {
-    std::ofstream fout(file.toStdString() + ".yaml");
-    fout << out.c_str();
+    std::ofstream fout(withYamlExtension(file.toStdString()));
+    fout << waypointsToYaml(acummulated_poses_);
     std::cout << "Saving waypoints succeeded" << std::endl;
   } else {
     std::cout << "Saving waypoints aborted" << std::endl;

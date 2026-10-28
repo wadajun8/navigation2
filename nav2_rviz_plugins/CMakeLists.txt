@@ -112,6 +112,11 @@ install(
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   ament_lint_auto_find_test_dependencies()
+
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_waypoint_io test/test_waypoint_io.cpp)
+  ament_target_dependencies(test_waypoint_io geometry_msgs yaml_cpp_vendor)
+  target_link_libraries(test_waypoint_io yaml-cpp)
 endif()
 
 ament_export_include_directories(include)
