@@ -471,6 +471,12 @@ Nav2Panel::Nav2Panel(QWidget * parent)
     &InitialThread::navigationInactive);
   inactiveSignal->setTargetState(initial_);
   pre_initial_->addTransition(inactiveSignal);
+  // Nav2 may become active after the panel has already shown it as inactive
+  QSignalTransition * lateActiveSignal = new QSignalTransition(
+    initial_thread_,
+    &InitialThread::navigationActive);
+  lateActiveSignal->setTargetState(idle_);
+  initial_->addTransition(lateActiveSignal);
 
   QObject::connect(
     initial_thread_, &InitialThread::navigationActive,
@@ -599,6 +605,10 @@ Nav2Panel::Nav2Panel(QWidget * parent)
 
 Nav2Panel::~Nav2Panel()
 {
+  if (initial_thread_ && initial_thread_->isRunning()) {
+    initial_thread_->requestInterruption();
+    initial_thread_->wait();
+  }
 }
 
 void Nav2Panel::initialStateHandler()

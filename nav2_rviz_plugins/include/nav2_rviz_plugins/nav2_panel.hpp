@@ -17,6 +17,7 @@
 
 #include <QtWidgets>
 #include <QBasicTimer>
+#include <QPointer>
 #undef NO_ERROR
 
 #include <memory>
@@ -167,7 +168,7 @@ private:
   QLineEdit * nr_of_loops_{nullptr};
 
   QStateMachine state_machine_;
-  InitialThread * initial_thread_;
+  QPointer<InitialThread> initial_thread_;
 
   QState * pre_initial_{nullptr};
   QState * initial_{nullptr};
@@ -240,29 +241,40 @@ public:
 
   void run() override
   {
-    SystemStatus status_nav = SystemStatus::TIMEOUT;
-    SystemStatus status_loc = SystemStatus::TIMEOUT;
-
-    while (status_nav == SystemStatus::TIMEOUT) {
-      if (status_nav == SystemStatus::TIMEOUT) {
-        status_nav = client_nav_->is_active(std::chrono::seconds(1));
-      }
-    }
-
-    // try to communicate twice, might not actually be up if in SLAM mode
-    bool tried_loc_bringup_once = false;
-    while (status_loc == SystemStatus::TIMEOUT) {
-      status_loc = client_loc_->is_active(std::chrono::seconds(1));
-      if (tried_loc_bringup_once) {
+    // Nav2 is usually still bringing up its nodes when RViz starts, since both are
+    // started from the same launch file. Stopping at the first INACTIVE answer left the
+    // panel in the "inactive" state for good, so keep polling until it becomes ACTIVE.
+    bool inactive_notified = false;
+    while (!isInterruptionRequested()) {
+      const SystemStatus status_nav = client_nav_->is_active(std::chrono::seconds(1));
+      if (status_nav == SystemStatus::ACTIVE) {
+        emit navigationActive();
         break;
       }
-      tried_loc_bringup_once = true;
+      if (status_nav == SystemStatus::INACTIVE && !inactive_notified) {
+        emit navigationInactive();
+        inactive_notified = true;
+      }
+      msleep(kPollIntervalMs);
     }
 
-    if (status_nav == SystemStatus::ACTIVE) {
-      emit navigationActive();
-    } else {
-      emit navigationInactive();
+    // The localization manager may not exist at all (e.g. in SLAM mode), so give up after
+    // a few timeouts. While it answers INACTIVE it is still bringing up, so keep waiting.
+    SystemStatus status_loc = SystemStatus::TIMEOUT;
+    int timeouts = 0;
+    while (!isInterruptionRequested() && timeouts < kMaxLocalizationTimeouts) {
+      status_loc = client_loc_->is_active(std::chrono::seconds(1));
+      if (status_loc == SystemStatus::ACTIVE) {
+        break;
+      }
+      if (status_loc == SystemStatus::TIMEOUT) {
+        timeouts++;
+      } else {
+        msleep(kPollIntervalMs);
+      }
+    }
+    if (isInterruptionRequested()) {
+      return;
     }
 
     if (status_loc == SystemStatus::ACTIVE) {
@@ -279,6 +291,9 @@ signals:
   void localizationInactive();
 
 private:
+  static constexpr unsigned long kPollIntervalMs = 500;  // NOLINT(runtime/int)
+  static constexpr int kMaxLocalizationTimeouts = 2;
+
   std::shared_ptr<nav2_lifecycle_manager::LifecycleManagerClient> client_nav_;
   std::shared_ptr<nav2_lifecycle_manager::LifecycleManagerClient> client_loc_;
 };
