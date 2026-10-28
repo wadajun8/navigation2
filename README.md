@@ -1,3 +1,11 @@
+> **このフォークについて（[wadajun8/navigation2](https://github.com/wadajun8/navigation2) の `vlm_kidnapping_detect` ブランチ）**
+>
+> raspicat2 用に Nav2 を改造したフォークです。`nav2_msgs` の定義を変更している（アクションの `error_code`、`FollowWaypoints` の `number_of_loops` / `goal_index` / `MissedWaypoint` など）ため、**apt 版の Nav2 と混ぜて使えません**。raspicat2 の `make colcon-build` / `make docker-colcon-build` では全パッケージをビルドして apt 版を置き換えます。
+>
+> raspicat2 で加えた主な修正:
+> - `nav2_rviz_plugins`: パネルが Nav2 の active 化を待ち続けるようにした（以前は起動直後に1回だけ確認し、間に合わないとボタンが押せないままだった）。
+> - `nav2_rviz_plugins`: ウェイポイントの保存・ロードを `waypoint_io.hpp` にまとめ、ロード時に向きが全部 `w` に入るバグと、保存時に拡張子が `.yaml.yaml` になるバグを直した。テストは `test/test_waypoint_io.cpp`。
+
 # Nav2
 [![GitHub Workflow Status](https://github.com/ros-planning/navigation2/actions/workflows/update_ci_image.yaml/badge.svg)](https://github.com/ros-planning/navigation2/actions/workflows/update_ci_image.yaml)
 [![codecov](https://codecov.io/gh/ros-planning/navigation2/branch/main/graph/badge.svg)](https://codecov.io/gh/ros-planning/navigation2)
